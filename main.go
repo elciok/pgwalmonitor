@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"flag"
 	"fmt"
 	"net"
 	"net/mail"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/lib/pq"
 )
+
+const VERSION = "0.0.1"
 
 const WALMON_ORIGIN = "WALMON_ORIGIN"
 const WALMON_DATA_SOURCE_STRING = "WALMON_DATA_SOURCE_STRING"
@@ -50,6 +53,13 @@ type Config struct {
 }
 
 func main() {
+	showVersion := flag.Bool("version", false, "show application version")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println(VERSION)
+		os.Exit(0)
+	}
+
 	config := ReadConfig()
 
 	walOk, err := CheckWalArchiving(config.DataSourceString)
