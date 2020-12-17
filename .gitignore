@@ -1,0 +1,6 @@
+pgwalmonitor
+pgwalmonitor.sha256
+*.tar.gz
+*.test
+*.out
+*.tmp
