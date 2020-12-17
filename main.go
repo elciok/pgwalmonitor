@@ -9,6 +9,8 @@ import (
 	"net/mail"
 	"net/smtp"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +27,8 @@ const WALMON_SMTP_DOMAIN = "WALMON_SMTP_DOMAIN"
 const WALMON_SMTP_AUTH = "WALMON_SMTP_AUTH"
 const WALMON_SMTP_TO = "WALMON_SMTP_TO"
 const WALMON_SMTP_FROM = "WALMON_SMTP_FROM"
+const WALMON_COMMAND_FULL_BACKUP_DATE = "WALMON_COMMAND_FULL_BACKUP_DATE"
+const WALMON_FULL_BACKUP_DAYS = "WALMON_FULL_BACKUP_DAYS"
 
 type SMTPConfig struct {
 	Address    string
@@ -38,28 +42,49 @@ type SMTPConfig struct {
 }
 
 type Config struct {
-	Origin           string
-	DataSourceString string
-	SMTP             *SMTPConfig
+	Origin                string
+	DataSourceString      string
+	CommandLastFullBackup string
+	DaysFullBackup        int
+	SMTP                  *SMTPConfig
 }
 
 func main() {
 	config := ReadConfig()
 
-	ok, err := Query(config.DataSourceString)
+	walOk, err := CheckWalArchiving(config.DataSourceString)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
 
-	if ok {
+	if walOk {
 		fmt.Println("WAL archiving status=OK.")
 	} else {
 		fmt.Println("WAL archiving status=ERROR.")
-		err = NotifyError(config)
+		err = NotifyError(config, false)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			os.Exit(1)
+		}
+	}
+
+	if len(config.CommandLastFullBackup) > 0 {
+		fullOk, err := CheckFullBackup(config.CommandLastFullBackup, config.DaysFullBackup)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+			os.Exit(1)
+		}
+
+		if fullOk {
+			fmt.Println("Full backup status=OK.")
+		} else {
+			fmt.Println("Full backup status=ERROR.")
+			err = NotifyError(config, true)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s\n", err)
+				os.Exit(1)
+			}
 		}
 	}
 }
@@ -89,10 +114,17 @@ func ReadConfig() *Config {
 		config.SMTP.AuthMethod = "plain"
 	}
 
+	config.CommandLastFullBackup = os.Getenv(WALMON_COMMAND_FULL_BACKUP_DATE)
+	days, err := strconv.Atoi(os.Getenv(WALMON_FULL_BACKUP_DAYS))
+	config.DaysFullBackup = days
+	if err != nil {
+		config.DaysFullBackup = 7
+	}
+
 	return config
 }
 
-func Query(dataSourceString string) (bool, error) {
+func CheckWalArchiving(dataSourceString string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -114,8 +146,28 @@ func Query(dataSourceString string) (bool, error) {
 	return !walArchiveFail, nil
 }
 
-func NotifyError(config *Config) error {
-	subject := fmt.Sprintf("%s - WAL archiving error", config.Origin)
+func CheckFullBackup(command string, days int) (bool, error) {
+	out, err := exec.Command("bash", "-c", command).Output()
+	if err != nil {
+		return false, err
+	}
+	layout := "2006-01-02"
+	dateLastBackup, err := time.Parse(layout, strings.TrimSpace(string(out)))
+	if err != nil {
+		return false, err
+	}
+
+	limitDate := time.Now().AddDate(0, 0, -1*days)
+	return dateLastBackup.After(limitDate), nil
+}
+
+func NotifyError(config *Config, fullBackup bool) error {
+	typeString := "WAL archiving"
+	if fullBackup {
+		typeString = "Full backup"
+	}
+
+	subject := fmt.Sprintf("%s - %s error", config.Origin, typeString)
 
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "Origin: %s\r\n", config.Origin)
