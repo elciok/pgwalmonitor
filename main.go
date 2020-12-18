@@ -164,7 +164,9 @@ func CheckFullBackup(command string, days int) (bool, error) {
 	layout := "2006-01-02"
 	dateLastBackup, err := time.Parse(layout, strings.TrimSpace(string(out)))
 	if err != nil {
-		return false, err
+		// if it receives string that cant be parsed into date
+		// returns false to indicate it probably there is no last full backup
+		return false, nil
 	}
 
 	limitDate := time.Now().AddDate(0, 0, -1*days)

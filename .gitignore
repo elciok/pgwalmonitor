@@ -1,5 +1,5 @@
 pgwalmonitor
-pgwalmonitor.sha256
+*.sha256
 *.tar.gz
 *.test
 *.out
