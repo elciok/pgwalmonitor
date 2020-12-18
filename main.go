@@ -18,7 +18,7 @@ import (
 	"github.com/lib/pq"
 )
 
-const VERSION = "0.0.1"
+const VERSION = "0.0.3"
 
 const WALMON_ORIGIN = "WALMON_ORIGIN"
 const WALMON_DATA_SOURCE_STRING = "WALMON_DATA_SOURCE_STRING"
