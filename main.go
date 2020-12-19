@@ -18,7 +18,7 @@ import (
 	"github.com/lib/pq"
 )
 
-const VERSION = "0.0.3"
+const VERSION = "0.0.4"
 
 const WALMON_ORIGIN = "WALMON_ORIGIN"
 const WALMON_DATA_SOURCE_STRING = "WALMON_DATA_SOURCE_STRING"
@@ -169,8 +169,8 @@ func CheckFullBackup(command string, days int) (bool, error) {
 		return false, nil
 	}
 
-	limitDate := time.Now().AddDate(0, 0, -1*days)
-	return dateLastBackup.After(limitDate), nil
+	limitDate := time.Now().AddDate(0, 0, -1*days).Truncate(24 * time.Hour)
+	return dateLastBackup.After(limitDate) || dateLastBackup.Equal(limitDate), nil
 }
 
 func NotifyError(config *Config, fullBackup bool) error {
