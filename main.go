@@ -18,7 +18,7 @@ import (
 	"github.com/lib/pq"
 )
 
-const VERSION = "0.0.4"
+const VERSION = "0.0.5"
 
 const WALMON_ORIGIN = "WALMON_ORIGIN"
 const WALMON_DATA_SOURCE_STRING = "WALMON_DATA_SOURCE_STRING"
@@ -30,6 +30,7 @@ const WALMON_SMTP_DOMAIN = "WALMON_SMTP_DOMAIN"
 const WALMON_SMTP_AUTH = "WALMON_SMTP_AUTH"
 const WALMON_SMTP_TO = "WALMON_SMTP_TO"
 const WALMON_SMTP_FROM = "WALMON_SMTP_FROM"
+const WALMON_MAX_WAL_FILES = "WALMON_MAX_WAL_FILES"
 const WALMON_COMMAND_FULL_BACKUP_DATE = "WALMON_COMMAND_FULL_BACKUP_DATE"
 const WALMON_FULL_BACKUP_DAYS = "WALMON_FULL_BACKUP_DAYS"
 
@@ -47,6 +48,7 @@ type SMTPConfig struct {
 type Config struct {
 	Origin                string
 	DataSourceString      string
+	MaxFiles              int
 	CommandLastFullBackup string
 	DaysFullBackup        int
 	SMTP                  *SMTPConfig
@@ -72,10 +74,30 @@ func main() {
 		fmt.Println("WAL archiving status=OK.")
 	} else {
 		fmt.Println("WAL archiving status=ERROR.")
-		err = NotifyError(config, false)
+		err = NotifyError(config, "WAL archiving error")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
 			os.Exit(1)
+		}
+	}
+
+	if config.MaxFiles > 0 {
+		walCount, err := GetWalFileCount(config.DataSourceString)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+			os.Exit(1)
+		}
+
+		if walCount <= config.MaxFiles {
+			fmt.Println("WAL count status=OK.")
+		} else {
+			fmt.Println("WAL count status=ERROR.")
+			subject := fmt.Sprintf("WAL file count = %d (max = %d)", walCount, config.MaxFiles)
+			err = NotifyError(config, subject)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s\n", err)
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -90,7 +112,7 @@ func main() {
 			fmt.Println("Full backup status=OK.")
 		} else {
 			fmt.Println("Full backup status=ERROR.")
-			err = NotifyError(config, true)
+			err = NotifyError(config, "Full backup")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s\n", err)
 				os.Exit(1)
@@ -122,6 +144,13 @@ func ReadConfig() *Config {
 	config.SMTP.AuthMethod = os.Getenv(WALMON_SMTP_AUTH)
 	if config.SMTP.AuthMethod == "" {
 		config.SMTP.AuthMethod = "plain"
+	}
+
+	walFiles, err := strconv.Atoi(os.Getenv(WALMON_MAX_WAL_FILES))
+	if err != nil || walFiles <= 0 {
+		config.MaxFiles = 0
+	} else {
+		config.MaxFiles = walFiles
 	}
 
 	config.CommandLastFullBackup = os.Getenv(WALMON_COMMAND_FULL_BACKUP_DATE)
@@ -156,6 +185,26 @@ func CheckWalArchiving(dataSourceString string) (bool, error) {
 	return !walArchiveFail, nil
 }
 
+func GetWalFileCount(dataSourceString string) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	pool, err := sql.Open("postgres", dataSourceString)
+	if err != nil {
+		return 0, err
+	}
+	defer pool.Close()
+
+	var count int
+	err = pool.QueryRowContext(ctx, `SELECT COUNT(*) FROM pg_ls_dir('pg_wal') 
+		WHERE pg_ls_dir ~ '^[0-9A-F]{24}'`).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 func CheckFullBackup(command string, days int) (bool, error) {
 	out, err := exec.Command("bash", "-c", command).Output()
 	if err != nil {
@@ -173,19 +222,14 @@ func CheckFullBackup(command string, days int) (bool, error) {
 	return dateLastBackup.After(limitDate) || dateLastBackup.Equal(limitDate), nil
 }
 
-func NotifyError(config *Config, fullBackup bool) error {
-	typeString := "WAL archiving"
-	if fullBackup {
-		typeString = "Full backup"
-	}
-
-	subject := fmt.Sprintf("%s - %s error", config.Origin, typeString)
+func NotifyError(config *Config, subject string) error {
+	fullSubject := fmt.Sprintf("%s - %s error", config.Origin, subject)
 
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "Origin: %s\r\n", config.Origin)
 	fmt.Fprintf(&builder, "Time checked: %s\r\n\r\n", time.Now())
 
-	err := SendEmail(config.SMTP, subject, builder.String())
+	err := SendEmail(config.SMTP, fullSubject, builder.String())
 	return err
 }
 

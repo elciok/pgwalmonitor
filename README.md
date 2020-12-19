@@ -4,7 +4,7 @@ Checks PostgreSQL backup using WAL archiving status. If a problem is detected, i
 
 It runs its checks, sends e-mails if needed and returns, so you probablu need to run it as a cron job to keep monitoring backups.
 
-Compatible with PostgreSQL version >= 9.4.
+Compatible with PostgreSQL version >= 10.
 
 ## Configuration
 
@@ -22,12 +22,15 @@ You can use environment variables to configure pgwalmonitor.
 - WALMON_SMTP_PASSWORD: Password to authenticate to SMTP server.
 - WALMON_SMTP_DOMAIN: SMTP domain (hello).
 - WALMON_SMTP_AUTH: SMTP authentication method. Default: *plain*.
+- WALMON_MAX_WAL_FILES: Maximum number of WAL files in pg_wal directory. Don't set it or set it to zero if file count should not be checked. Default: 0.
 - WALMON_COMMAND_FULL_BACKUP_DATE: Shell comand that will return last successful full backup date (format: YYYY-MM-DD). It needs to be a bash command. Example when using wal-g for backups: wal-g backup-list | awk 'END{print}' | awk '{print $2}' | cut -c1-10
 - WALMON_FULL_BACKUP_DAYS: Maximum number of days for full backups. Default: 7.
 
 ## How it checks WAL archiving
 
 WAL archiving is checked by querying *pg_stat_archiver*, which contains information about WAL archiving like when it has last failed and succeeded. The user in the data source string must be able to query *pg_stat_archiver*.
+
+It can also check if number of WAL files in the pg_wal directory exceeds a threshold set useing *WALMON_MAX_WAL_FILES*. The user in the data source string must be able to *run pg_ls_dir*.
 
 ## How it checks Full backups
 
