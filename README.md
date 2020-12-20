@@ -30,7 +30,7 @@ You can use environment variables to configure pgwalmonitor.
 
 WAL archiving is checked by querying *pg_stat_archiver*, which contains information about WAL archiving like when it has last failed and succeeded. The user in the data source string must be able to query *pg_stat_archiver*.
 
-It can also check if number of WAL files in the pg_wal directory exceeds a threshold set useing *WALMON_MAX_WAL_FILES*. The user in the data source string must be able to *run pg_ls_dir*.
+It can also check if number of WAL files in the pg_wal directory exceeds a threshold set useing *WALMON_MAX_WAL_FILES*. The user in the data source string must be able to run *pg_ls_dir*.
 
 ## How it checks Full backups
 
