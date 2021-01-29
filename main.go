@@ -18,7 +18,7 @@ import (
 	"github.com/lib/pq"
 )
 
-const VERSION = "0.0.5"
+const VERSION = "0.0.6"
 
 const WALMON_ORIGIN = "WALMON_ORIGIN"
 const WALMON_DATA_SOURCE_STRING = "WALMON_DATA_SOURCE_STRING"
@@ -206,10 +206,13 @@ func GetWalFileCount(dataSourceString string) (int, error) {
 }
 
 func CheckFullBackup(command string, days int) (bool, error) {
+	fmt.Printf("\nCommand to check full backup: %s\n", command)
 	out, err := exec.Command("bash", "-c", command).Output()
 	if err != nil {
 		return false, err
 	}
+	fmt.Printf("Output from full backup check command: %s\n", out)
+
 	layout := "2006-01-02"
 	dateLastBackup, err := time.Parse(layout, strings.TrimSpace(string(out)))
 	if err != nil {
